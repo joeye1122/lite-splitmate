@@ -7,7 +7,97 @@ from ultralytics import YOLO
 import matplotlib.pyplot as plt
 from PIL import Image
 import os
+import requests
+import face_recognition
 
+import base64
+from io import BytesIO
+from PIL import Image
+
+
+
+tenants = []
+utilities = []
+
+def fetch_data():
+    global tenants, utilities
+
+    with open('example.json', 'r', encoding='utf-8') as json_file:
+        data = json.load(json_file)
+        
+    # url = 'http://localhost:5000/read'
+    # response = requests.get(url)
+    # response.raise_for_status()
+    # data = response.json()
+
+    tenants = data.get('tenants', [])
+    utilities = data.get('utilities', [])
+
+
+def identify_tenant(input_image_path):
+    global tenants
+    known_encodings = []
+    tenant_ids = []
+    tenant_names = []
+
+    # 1. for every tenant
+    for tenant in tenants:
+        tenant_id = tenant['id']
+        tenant_name = tenant['name']
+        tenant_photo_base64 = tenant['photo']  # Base64 encoding JPEG
+
+        try:
+            # decode Base64 string then load image
+            tenant_image_data = base64.b64decode(tenant_photo_base64)
+            tenant_image = Image.open(BytesIO(tenant_image_data))
+            tenant_image_np = np.array(tenant_image)
+
+            tenant_face_encodings = face_recognition.face_encodings(tenant_image_np)
+            if len(tenant_face_encodings) > 0:
+                tenant_face_encoding = tenant_face_encodings[0]
+                known_encodings.append(tenant_face_encoding)
+                tenant_ids.append(tenant_id)
+                tenant_names.append(tenant_name)
+            else:
+                print(f"未在租户 {tenant_name} 的照片中检测到人脸。")
+        except Exception as e:
+            print(f"处理租户 {tenant_name} 的照片时发生错误：{e}")
+
+    # 检查是否成功加载了租户的特征向量
+    if not known_encodings:
+        print("没有可用于比较的租户人脸特征向量。")
+        return None
+
+    # 2. 加载输入图像并提取特征向量
+    try:
+        input_image = face_recognition.load_image_file(input_image_path)
+        input_face_locations = face_recognition.face_locations(input_image)
+        input_face_encodings = face_recognition.face_encodings(input_image, input_face_locations)
+    except Exception as e:
+        print(f"加载输入图像时发生错误：{e}")
+        return None
+
+    if len(input_face_encodings) == 0:
+        print("未能在输入图像中检测到人脸。")
+        return None
+
+    input_face_encoding = input_face_encodings[0]  # 假设只处理第一张人脸
+
+    # 3. 比较输入人脸与租户人脸特征向量
+    distances = face_recognition.face_distance(known_encodings, input_face_encoding)
+    min_distance_index = np.argmin(distances)
+    min_distance = distances[min_distance_index]
+    threshold = 0.6  # 可根据需要调整
+
+    if min_distance < threshold:
+        matched_tenant = tenants[min_distance_index]
+        matched_tenant_name = tenant_names[min_distance_index]
+        print(f"识别结果：{matched_tenant_name}，距离：{min_distance}")
+        return matched_tenant
+    else:
+        print("无法识别此人脸。")
+        return None
+    
 
 
 class ObjectDetection:
@@ -145,6 +235,10 @@ class ObjectDetection:
                         self.record_device_usage(person_id, device_label, start_time, end_time)
                         del self.usage_status[(person_id, device_label)]
                         print(f"Usage ended for {person_id} on {device_label}")
+
+
+
+
 
                 # Plot line from person center to device center
                 cv2.line(frame, (person_center[0], person_center[1]), (device_center[0], device_center[1]), (255, 0, 0), 2)
