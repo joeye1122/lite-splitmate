@@ -107,7 +107,7 @@ class FaceRecognizer:
 
         try:
             result = subprocess.check_output([
-                'python', script_path,
+                'python3', script_path,
                 '--mac_address', mac_address,
                 '--command', command,
                 '--characteristic', characteristic
