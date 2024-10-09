@@ -2,102 +2,25 @@ import torch
 import numpy as np
 import cv2
 import json
-from time import strftime, localtime, time
+from time import time, strftime, gmtime
 from ultralytics import YOLO
 import matplotlib.pyplot as plt
-from PIL import Image
-import os
-import requests
-import face_recognition
-
-import base64
-from io import BytesIO
-from PIL import Image
+import FaceRecognizer
+from FaceRecognizer import FaceRecognizer
+import logging
+import sys
 
 
 
-tenants = []
-utilities = []
-
-def fetch_data():
-    global tenants, utilities
-
-    with open('example.json', 'r', encoding='utf-8') as json_file:
-        data = json.load(json_file)
-        
-    # url = 'http://localhost:5000/read'
-    # response = requests.get(url)
-    # response.raise_for_status()
-    # data = response.json()
-
-    tenants = data.get('tenants', [])
-    utilities = data.get('utilities', [])
-
-
-def identify_tenant(input_image_path):
-    global tenants
-    known_encodings = []
-    tenant_ids = []
-    tenant_names = []
-
-    # 1. for every tenant
-    for tenant in tenants:
-        tenant_id = tenant['id']
-        tenant_name = tenant['name']
-        tenant_photo_base64 = tenant['photo']  # Base64 encoding JPEG
-
-        try:
-            # decode Base64 string then load image
-            tenant_image_data = base64.b64decode(tenant_photo_base64)
-            tenant_image = Image.open(BytesIO(tenant_image_data))
-            tenant_image_np = np.array(tenant_image)
-
-            tenant_face_encodings = face_recognition.face_encodings(tenant_image_np)
-            if len(tenant_face_encodings) > 0:
-                tenant_face_encoding = tenant_face_encodings[0]
-                known_encodings.append(tenant_face_encoding)
-                tenant_ids.append(tenant_id)
-                tenant_names.append(tenant_name)
-            else:
-                print(f"未在租户 {tenant_name} 的照片中检测到人脸。")
-        except Exception as e:
-            print(f"处理租户 {tenant_name} 的照片时发生错误：{e}")
-
-    # 检查是否成功加载了租户的特征向量
-    if not known_encodings:
-        print("没有可用于比较的租户人脸特征向量。")
-        return None
-
-    # 2. 加载输入图像并提取特征向量
-    try:
-        input_image = face_recognition.load_image_file(input_image_path)
-        input_face_locations = face_recognition.face_locations(input_image)
-        input_face_encodings = face_recognition.face_encodings(input_image, input_face_locations)
-    except Exception as e:
-        print(f"加载输入图像时发生错误：{e}")
-        return None
-
-    if len(input_face_encodings) == 0:
-        print("未能在输入图像中检测到人脸。")
-        return None
-
-    input_face_encoding = input_face_encodings[0]  # 假设只处理第一张人脸
-
-    # 3. 比较输入人脸与租户人脸特征向量
-    distances = face_recognition.face_distance(known_encodings, input_face_encoding)
-    min_distance_index = np.argmin(distances)
-    min_distance = distances[min_distance_index]
-    threshold = 0.6  # 可根据需要调整
-
-    if min_distance < threshold:
-        matched_tenant = tenants[min_distance_index]
-        matched_tenant_name = tenant_names[min_distance_index]
-        print(f"识别结果：{matched_tenant_name}，距离：{min_distance}")
-        return matched_tenant
-    else:
-        print("无法识别此人脸。")
-        return None
-    
+# Configure logging at the top of your script
+# logging.basicConfig(
+#     level=logging.DEBUG,
+#     format='%(asctime)s - %(levelname)s - %(message)s',
+#     handlers=[
+#         logging.StreamHandler(sys.stdout),
+#         logging.FileHandler('app.log', mode='w')
+#     ]
+# )
 
 
 class ObjectDetection:
@@ -106,8 +29,8 @@ class ObjectDetection:
         self.electronic_devices = ["laptop", "tv", "cell phone", "tablet", "refrigerator"]  # List of electronic devices
 
         self.capture_index = capture_index
-        self.enter_distance = 100  # the threshold for entering the device distance
-        self.exit_distance = 130  # the threshold for exiting the device distance
+        self.enter_distance = 1000  # the threshold for entering the device distance
+        self.exit_distance = 1300  # the threshold for exiting the device distance
         self.trigger_duration = 2  # time threshold in sec
         self.usage_status = {}  # record the person_id and device_id status
         self.last_update_time = {}  # record the person and device's last update timestampe
@@ -117,6 +40,11 @@ class ObjectDetection:
 
         self.model = self.load_model()
         self.CLASS_NAMES_DICT = self.model.model.names
+
+        json_file_path = 'test_cached.json'
+        photos_folder_path = 'image folder'
+        self.face_recognizer = FaceRecognizer(json_file_path, photos_folder_path)
+
 
     def load_model(self):
         model = YOLO("yolov8m.pt")  # load a pretrained YOLOv8m model
@@ -128,13 +56,14 @@ class ObjectDetection:
         results = self.model.track(frame, tracker="bytetrack.yaml")
         return results
 
-    def record_device_usage(self, person_id, device_label, start_time, end_time):
+    def record_device_usage(self, person_id, device_label, usage,start_time, end_time):
         """ 
         the json to be generated when the event is finished
         """
         data = {
             "person_id": person_id,  # Placeholder for the person identifier
             "device_id": device_label,  # Placeholder for the device identifier
+            "usage": usage,
             "start_time": start_time,
             "end_time": end_time
         }
@@ -215,12 +144,17 @@ class ObjectDetection:
                         if duration >= self.trigger_duration and "in_use" not in self.usage_status[(person_id, device_label)]:
 
                             for person_l in persons_position:
-                                crop_origi_mage(person_l[0],person_l[1],person_l[2],person_l[3],person_l[4],person_l[5])
+                                current_person_image = crop_origi_mage(person_l[0],person_l[1],person_l[2],person_l[3],person_l[4],person_l[5])
+                                cropped_img_rgb = cv2.cvtColor(current_person_image, cv2.COLOR_BGR2RGB)
+                                current_person_name = self.face_recognizer.identify_tenant(cropped_img_rgb)
+                                
+                                ble_script_result = self.face_recognizer.get_device_power(device_label)
+
 
 
                             # If the duration exceeds trigger_duration, mark the device as in use
                             self.usage_status[(person_id, device_label)]["in_use"] = True
-                            start_time = strftime("%Y-%m-%d %H:%M:%S", localtime(self.usage_status[(person_id, device_label)]["starting_time"]))
+                            start_time = strftime("%Y-%m-%d %H:%M:%S", gmtime(self.usage_status[(person_id, device_label)]["starting_time"]))
                             self.usage_status[(person_id, device_label)]["start_time"] = start_time
                             print(f"Device {device_label} is now in use by {person_id}")
 
@@ -229,10 +163,10 @@ class ObjectDetection:
                 elif distance > self.exit_distance:
                     # If the person was using the device, end the usage session
                     if (person_id, device_label) in self.usage_status and "in_use" in self.usage_status[(person_id, device_label)]:
-                        end_time = strftime("%Y-%m-%d %H:%M:%S", localtime(time()))
+                        end_time = strftime("%Y-%m-%d %H:%M:%S", gmtime(time()))
                         start_time = self.usage_status[(person_id, device_label)]["start_time"]
                         # Generate JSON and remove usage status
-                        self.record_device_usage(person_id, device_label, start_time, end_time)
+                        self.record_device_usage(current_person_name, device_label, ble_script_result, start_time, end_time)
                         del self.usage_status[(person_id, device_label)]
                         print(f"Usage ended for {person_id} on {device_label}")
 
@@ -249,6 +183,8 @@ class ObjectDetection:
 
     def __call__(self):
         cap = cv2.VideoCapture(self.capture_index)
+        cap.set(cv2.CAP_PROP_FPS, 15)
+
 
         # cap = cv2.VideoCapture("IMG_3534.MOV")
 
@@ -288,20 +224,7 @@ def crop_origi_mage(x1, y1, x2, y2, orig_img, track_id):
     """
     # Crop the image based on the coordinates
     cropped_img = orig_img[y1:y2, x1:x2]
-    
-    # Create a folder named after the track ID if it doesn't exist
-    folder_name = f"track_{track_id}"
-    if not os.path.exists(folder_name):
-        os.makedirs(folder_name)
-    
-    # Generate the file name with current timestamp
-    current_time = strftime("%Y%m%d_%H%M%S")
-    file_path = os.path.join(folder_name, f"{current_time}.png")
-    
-    # Save the cropped image
-    cv2.imwrite(file_path, cropped_img)
-    print(f"Cropped image saved at: {file_path}")
-
+    return cropped_img
 
 def main():
     detector = ObjectDetection(capture_index=0)
