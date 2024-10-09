@@ -1,0 +1,18 @@
+{
+    "users": [
+      { "_id": "1", "name": "joe" }
+    ],
+    "utilities": [
+      {
+        "_id": "66f4cd2867ab58efa37bc49e",
+        "name": "Microwave",
+        "mac_address": "D6:71:61:10:D6:9D"
+      },
+      {
+        "_id": "66f4cd4567ab58efa37bc4a1",
+        "name": "TV",
+        "mac_address": "ED:70:92:84:20:53"
+      }
+    ]
+  }
+  
