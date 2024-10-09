@@ -1,5 +1,5 @@
 numpy
-opencv-python
+cv2
 json
 time
 ultralytics
