@@ -1,4 +1,3 @@
-import torch
 import numpy as np
 import cv2
 import json
@@ -35,7 +34,9 @@ class ObjectDetection:
         self.usage_status = {}  # record the person_id and device_id status
         self.last_update_time = {}  # record the person and device's last update timestampe
 
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        # self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.device = 'cpu'
+
         print("Using Device: ", self.device)
 
         self.model = self.load_model()
