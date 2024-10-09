@@ -20,4 +20,4 @@ ENV PYTHONUNBUFFERED=1
 EXPOSE 8000
 
 # Command to run the application (modify as needed)
-CMD ["python", "FaceRecognizer.py"]
+CMD ["python", "YOLOInferenceClass.py"]
