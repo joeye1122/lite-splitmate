@@ -1,8 +1,9 @@
 numpy
-opencv-python
-ultralytics
-matplotlib
 bleak
 face_recognition
 requests
-pillow
+Flask==2.3.2
+pymongo==4.5.0
+python-dotenv==1.0.0
+bson==0.5.10
+portalocker==2.8.2
