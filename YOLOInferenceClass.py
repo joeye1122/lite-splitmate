@@ -48,8 +48,12 @@ class ObjectDetection:
 
 
     def load_model(self):
-        model = YOLO("yolov8m.pt")  # load a pretrained YOLOv8m model
+        model = YOLO("yolov8n.pt")  # load a pretrained YOLOv8m model
+        # model.export(format="ncnn")
+
+        
         model.fuse()
+        # ncnn_model = YOLO("yolov8n_ncnn_model")
         return model
     
     def predict(self, frame):
