@@ -232,7 +232,7 @@ def crop_origi_mage(x1, y1, x2, y2, orig_img, track_id):
     return cropped_img
 
 def main():
-    detector = ObjectDetection(capture_index=0)
+    detector = ObjectDetection(capture_index=1)
     
     detector()
 
