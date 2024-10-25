@@ -8,24 +8,13 @@ import FaceRecognizer
 from FaceRecognizer import FaceRecognizer
 import logging
 import sys
-
-
-
-# Configure logging at the top of your script
-# logging.basicConfig(
-#     level=logging.DEBUG,
-#     format='%(asctime)s - %(levelname)s - %(message)s',
-#     handlers=[
-#         logging.StreamHandler(sys.stdout),
-#         logging.FileHandler('app.log', mode='w')
-#     ]
-# )
-
+import argparse
+import requests
 
 class ObjectDetection:
 
     def __init__(self, capture_index):
-        self.electronic_devices = ["laptop", "tv", "cell phone", "tablet", "refrigerator"]  # List of electronic devices
+        self.electronic_devices = ["laptop", "tv", "cell phone", "refrigerator"]  # List of electronic devices
 
         self.capture_index = capture_index
         self.enter_distance = 1000  # the threshold for entering the device distance
@@ -42,13 +31,31 @@ class ObjectDetection:
         self.model = self.load_model()
         self.CLASS_NAMES_DICT = self.model.model.names
 
-        json_file_path = 'test_cached.json'
-        photos_folder_path = 'image folder'
+        json_file_path, photos_folder_path = self.get_paths_from_api()
         self.face_recognizer = FaceRecognizer(json_file_path, photos_folder_path)
 
 
+    def get_paths_from_api(self):
+        try:
+            response = requests.get('http://127.0.0.1:5000/read')
+            if response.status_code == 200:
+                data = response.json()
+                json_file_path = data.get('cache_json', '')
+                photos_folder_path = data.get('image_folder', '')
+                if json_file_path and photos_folder_path:
+                    print(f"Successfully retrieved paths: {json_file_path}, {photos_folder_path}")
+                    return json_file_path, photos_folder_path
+                else:
+                    raise ValueError("Invalid paths returned from the API.")
+            else:
+                raise ConnectionError(f"Failed to fetch data from API. Status code: {response.status_code}")
+        except Exception as e:
+            print(f"Error fetching paths from API: {e}")
+            raise
+
     def load_model(self):
-        model = YOLO("yolov8n.pt")  # load a pretrained YOLOv8m model
+        # model = YOLO("yolov8n.pt")  # load a pretrained YOLOv8m model
+        model = YOLO("yolov3-tiny.pt")
         # model.export(format="ncnn")
 
         
@@ -98,10 +105,12 @@ class ObjectDetection:
                 # Get class label
                 label = self.CLASS_NAMES_DICT[class_id]
 
+                track_id = -1 
+
                 # Track id
-                if track_ids is not None:
+                if track_ids is not None and track_ids[i] is not None:
                     track_id = int(track_ids[i])
-                    label_text = f'{label} {confidence:.2f} ID: {track_id}'  # Include track ID in label
+                    label_text = f'{label} {confidence:.2f} ID: {track_id}'
                 else:
                     label_text = f'{label} {confidence:.2f}'
 
@@ -114,14 +123,15 @@ class ObjectDetection:
 
                 # If label is "person", save center coordinates and check if using a device
                 if label == "person":
-                    persons.append((center_x, center_y, track_id))  # Add track_id to persons list
-                    print(f"Person center: {center_x}, {center_y}")
-                    persons_position.append((x1, y1, x2, y2, frame,track_id))
+                    if track_id != -1:
+                        persons.append((center_x, center_y, track_id))  # Add track_id to persons list
+                        logging.info(f"A Person detacted at {center_x}, {center_y}")
+                        persons_position.append((x1, y1, x2, y2, frame,track_id))
 
                 # If label is an electronic device, save center coordinates
                 if label in self.electronic_devices:
                     devices.append((center_x, center_y, label))  # Add device label to devices list
-                    print(f"{label} center: {center_x}, {center_y}")
+                    logging.info(f"{label} detacted at {center_x}, {center_y}")
 
         # Calculate distance between person and devices, then apply logic for usage
         for person_center in persons:
@@ -129,7 +139,7 @@ class ObjectDetection:
                 # Calculate distance from person to device (center to center)
                 distance = np.sqrt((person_center[0] - device_center[0]) ** 2 +
                                 (person_center[1] - device_center[1]) ** 2)
-                print(f"Distance from person to device: {distance:.2f} pixels")
+                logging.info(f"Distance from person to device: {distance:.2f} pixels")
 
                 person_id = person_center[2]
                 device_label = device_center[2]
@@ -149,6 +159,11 @@ class ObjectDetection:
                         if duration >= self.trigger_duration and "in_use" not in self.usage_status[(person_id, device_label)]:
 
                             for person_l in persons_position:
+                                #update the database
+                                # self.json_file_path, self.photos_folder_path = self.get_paths_from_api()
+                                # self.face_recognizer.update_cache(self.json_file_path, self.photos_folder_path)
+
+
                                 current_person_image = crop_origi_mage(person_l[0],person_l[1],person_l[2],person_l[3],person_l[4],person_l[5])
                                 cropped_img_rgb = cv2.cvtColor(current_person_image, cv2.COLOR_BGR2RGB)
                                 current_person_name = self.face_recognizer.identify_tenant(cropped_img_rgb)
@@ -188,6 +203,9 @@ class ObjectDetection:
 
     def __call__(self):
         cap = cv2.VideoCapture(self.capture_index)
+
+        # cap = cv2.VideoCapture(gst_str, cv2.CAP_GSTREAMER)
+
         cap.set(cv2.CAP_PROP_FPS, 15)
 
 
@@ -214,10 +232,10 @@ class ObjectDetection:
             # Show FPS
             cv2.putText(frame, f'FPS: {int(fps)}', (20, 70), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 2)
 
-            # cv2.imshow('YOLOv8 Detection', frame)
+            cv2.imshow('YOLOv8 Detection', frame)
 
-            # if cv2.waitKey(5) & 0xFF == 27:
-            #     break
+            if cv2.waitKey(5) & 0xFF == 27:
+                break
 
         cap.release()
         cv2.destroyAllWindows()
@@ -232,8 +250,7 @@ def crop_origi_mage(x1, y1, x2, y2, orig_img, track_id):
     return cropped_img
 
 def main():
-    detector = ObjectDetection(capture_index=1)
-    
+    detector = ObjectDetection(capture_index=0)
     detector()
 
 

@@ -1,1 +1,1 @@
-{"users": [], "utilities": []}
+{"users": [{"_id": "66f4c9ea5e70dac65c590d41", "name": "p1"}, {"_id": "66f4ca865e70dac65c590d4f", "name": "t1h1"}, {"_id": "66f4caa15e70dac65c590d52", "name": "t2h1"}], "utilities": [{"_id": "66f4cd2867ab58efa37bc49e", "name": "Microwave", "mac_address": "D6:71:61:10:D6:9D"}, {"_id": "66f4cd4567ab58efa37bc4a1", "name": "Fridge", "mac_address": "ED:70:92:84:20:53"}]}

@@ -132,6 +132,8 @@ from dotenv import load_dotenv
 from PIL import Image
 from io import BytesIO
 import logging  # Import the logging module
+import sys
+
 
 # Set up basic logging configuration
 logging.basicConfig(
@@ -200,7 +202,7 @@ class FaceRecognizer:
         # Check if any faces are detected
         if not face_encodings:
             logging.warning("No face detected.")
-            return None
+            return "None"
 
         # Use the first face encoding found in the input image
         input_encoding = face_encodings[0]
@@ -211,7 +213,7 @@ class FaceRecognizer:
         # Check if there are known encodings to compare with
         if len(distances) == 0:
             logging.warning("No known faces to compare.")
-            return None
+            return "None"
 
         # Find the index of the smallest distance (best match)
         best_match_index = np.argmin(distances)
@@ -242,7 +244,7 @@ class FaceRecognizer:
                         logging.error(f"Failed to send alert. Status code: {response.status_code}")
                 except Exception as e:
                     logging.error(f"Error sending alert: {e}")
-            return None
+            return "Unknow"
 
     def get_device_power(self, label):
         device_info = None
@@ -263,7 +265,7 @@ class FaceRecognizer:
 
         try:
             result = subprocess.check_output([
-                'python', script_path,
+                sys.executable, script_path,
                 '--mac_address', mac_address,
                 '--command', command,
                 '--characteristic', characteristic
@@ -271,8 +273,16 @@ class FaceRecognizer:
 
             result = result.strip()
             logging.info(f"Device {label} ({mac_address}) power reading: {result}")
-            return result
+        
+            try:
+                power_value = int(result)
+                logging.info(f"Power value as integer: {power_value}")
+                return power_value
+            except ValueError:
+                logging.error(f"Invalid power value received: {result}")
+                return 0 
+        
 
         except subprocess.CalledProcessError as e:
             logging.error(f"Error calling script: {e.output}")
-            return None
+            return -1
