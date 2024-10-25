@@ -230,9 +230,9 @@ class ObjectDetection:
             fps = 1 / np.round(end_time - start_time, 2)
 
             # Show FPS
-            cv2.putText(frame, f'FPS: {int(fps)}', (20, 70), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 2)
+            # cv2.putText(frame, f'FPS: {int(fps)}', (20, 70), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 2)
 
-            cv2.imshow('YOLOv8 Detection', frame)
+            # cv2.imshow('YOLOv8 Detection', frame)
 
             if cv2.waitKey(5) & 0xFF == 27:
                 break
